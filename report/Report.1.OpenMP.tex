@@ -1,0 +1,38 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+
+\title{LABWORK: 1}
+\author{Damien ALVAREZ DE TOLEDO }
+\date{November 2019}
+
+\begin{document}
+
+\maketitle
+
+\section{How to implement the conversion :}\newline
+
+The following command lines from the labwork1\_CPU() function \newline 
+are copied in the labwork1\_OpenMP() function : 
+\newline
+
+\textbf{  \$ for (int j = 0; j < 100; j++) \{  \newline  
+  \$     for (int i = 0; i < pixelCount; i++) \{\newline
+  \$         outputImage[i * 3] = (char) (((int) inputImage->buffer[i * 3] + (int) \newline	inputImage->buffer[i * 3 + 1] + (int) inputImage->buffer[i * 3 + 2]) /\newline 	3);\newline
+          \$  outputImage[i * 3 + 1] = outputImage[i * 3];\newline
+          \$ outputImage[i * 3 + 2] = outputImage[i * 3];\newline
+      \$ \}\newline
+  \$  \}\newline}
+  \newline 
+  
+  with the added command above the copied fragment : \newline
+  
+  \textbf{\# pragma omp parallel for} \newline
+  
+  In the upward command, the \textbf{"parallel"} argument is used to parallelize the tasks of the labwork1\_OpenMP() algorithm and the \textbf{"for"} argument is used to optimize the parallelization in the "for" loops. \newline 
+
+\section{Speedup results:}\newline
+
+The speedup is 6 times faster from labwork1\_CPU() to labwork1\_OpenMP(). 
+
+\end{document}
+
