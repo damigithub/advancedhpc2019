@@ -45,8 +45,14 @@ int main(int argc, char **argv) {
             labwork.labwork2_GPU();
             break;
         case 3:
+
+            labwork.labwork1_CPU();
+            labwork.saveOutputImage("labwork2-cpu-out.jpg");
+            printf("labwork 1 CPU ellapsed %.1fms\n", lwNum, timer.getElapsedTimeInMilliSec());
+            timer.start();
             labwork.labwork3_GPU();
             labwork.saveOutputImage("labwork3-gpu-out.jpg");
+	    printf("labwork 3 ellapsed %.1fms\n", lwNum, timer.getElapsedTimeInMilliSec());
             break;
         case 4:
             labwork.labwork4_GPU();
@@ -157,25 +163,113 @@ void Labwork::labwork2_GPU() {
     for (int i = 0; i < nDevices; i++){
         // get informations from individual device
         cudaDeviceProp prop;
+	printf("Filling GPU number : %d\n", i);
         cudaGetDeviceProperties(&prop, i);
-        // something more here
+        // something more here		
+
+		//Core INFO
+		printf("Device name of GPU number %d : %s\n", i, prop.name);
+		printf("Clock rate: %d\n",prop.clockRate);
+		int nbCores = getSPcores(prop);
+		printf("Number of cores: %d\n", nbCores);
+		printf("Number of multiprocessors on device : %d\n", prop.multiProcessorCount);
+		printf("Warp Size : %d\n", prop.warpSize);
+
+		//Memory INFO
+		printf("Memory Clock Rate : %d\n",prop.memoryClockRate);
+		printf("Memory Bus Width : %d\n", prop.memoryBusWidth);
+		
+		
+	
     }
 
 }
 
+//Write a grey scale kernel here :
+ __global__ void grayScale(uchar3 *input, uchar3 *output) {
+       int tid = threadIdx.x + blockIdx.x * blockDim.x;
+       output[tid].x = (input[tid].x + input[tid].y +
+                       input[tid].z) / 3;
+       output[tid].z = output[tid].y = output[tid].x;
+}
+//This should be executed on a device core.
+
 void Labwork::labwork3_GPU() {
     // Calculate number of pixels
+ 
+    int pixelCount = inputImage->width * inputImage->height ;
 
-    // Allocate CUDA memory    
+    outputImage = static_cast<char *>(malloc(pixelCount * 3));
+
+    //Allocate CUDA Memory
+
+    uchar3 *devInput;
+    uchar3 *devOutput;
+    cudaMalloc(&devInput, pixelCount *sizeof(uchar3));
+    cudaMalloc(&devOutput, pixelCount *sizeof(uchar3));
+
+
+    //Copy CUDA Memory from CPU to GPU
+
+    cudaMemcpy(devInput, inputImage->buffer, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
+
+    //Processing
+
+    int blockSize = 64;
+    int numBlock = pixelCount  / blockSize;
+    printf("numblock %d\n", numBlock);
+    grayScale<<<numBlock, blockSize>>>(devInput , devOutput);
+    
+    //Copy CUDA Memory from GPU to CPU
+
+    cudaMemcpy(outputImage, devOutput, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
+
+    //Cleaning
+
+    cudaFree(devInput);
+    cudaFree(devOutput);
+
+/* 
+    int nbPixels;
+    nbPixels =(*inputImage).width*(*inputImage).height;
+    printf("coucou\n");
+    outputImage = static_cast<char *>(malloc(nbPixels * 3));
+	
+    char *hostInput =(char*) malloc(nbPixels * 3);
+    char *hostOutput = new char[nbPixels * 3];
+
+    uchar3 *devInput;
+    char *devGray;
+    uchar3 *devOutput;
+
+    // Allocate CUDA memory
+
+    cudaMalloc(&devInput, nbPixels * sizeof(uchar3)); 
+    cudaMalloc(&devGray, nbPixels * sizeof(char));
+    cudaMalloc(&devOutput, nbPixels * sizeof(uchar3));    
 
     // Copy CUDA Memory from CPU to GPU
 
-    // Processing
+     cudaMemcpy(devInput, hostInput,nbPixels * sizeof(uchar3),cudaMemcpyHostToDevice);
+
+    // Processing 
+
+   int blockSize = 64;
+   int numBlock = nbPixels / blockSize;
+   grayscale<<<numBlock, blockSize>>>(devInput, devOutput);
 
     // Copy CUDA Memory from GPU to CPU
 
+   cudaMemcpy(hostOutput, devGray,nbPixels * sizeof(uchar3),cudaMemcpyDeviceToHost); 
+
     // Cleaning
+
+   cudaFree(devInput);
+
+*/
 }
+
+
 
 void Labwork::labwork4_GPU() {
 }
