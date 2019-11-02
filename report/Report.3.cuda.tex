@@ -1,0 +1,66 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+
+\title{LABWORK3}
+\author{Damien ALVAREZ DE TOLEDO }
+\date{November 2019}
+
+\begin{document}
+
+\maketitle
+
+\section{Implementing the Labwork 3}\newine
+
+Here is how we implement the labwork3\_GPU() function: \newline
+\textbf{
+\begin{enumerate}
+\item Write a grey scale kernel.
+\item Calculate the number of pixels
+\item Allocate CUDA Memory
+\item Copy CUDA Memory from CPU to GPU
+\item Processing
+\item Copy CUDA Memory from GPU to CPU
+\item Cleaning (Freeing) }
+\end{enumerate}
+
+\section{Speedup}\newine
+
+The speedup is \textbf{30 times faster} (blockSize = 128) : \newline
+
+\textbf{Starting labwork 3 \newline
+labwork 1 CPU ellapsed 3142.0ms \newline
+numblock 78732 \newline
+labwork 3 ellapsed 112.0ms \newline}
+
+\section{Different BlockSize}\newine
+
+(blockSize = 64) : \newline
+
+\textbf{Starting labwork 3 \newline
+labwork 1 CPU ellapsed 3151.7ms \newline
+numblock 157464 \newline
+labwork 3 ellapsed 111.6ms \newline }
+
+The time speedup is very similar, there is no detectable difference. \newline
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+\end{enumerate}
+
+
+
+
+\end{document}
+
