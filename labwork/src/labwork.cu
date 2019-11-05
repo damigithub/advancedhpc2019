@@ -60,8 +60,9 @@ int main(int argc, char **argv) {
             printf("labwork 4 GPU ellapsed %.1fms\n", lwNum, timer.getElapsedTimeInMilliSec());
             break;
         case 5:
-            labwork.labwork5_CPU();
-            labwork.saveOutputImage("labwork5-cpu-out.jpg");
+            //labwork.labwork5_CPU();
+            //labwork.saveOutputImage("labwork5-cpu-out.jpg");
+           // printf("coucou\n");
             labwork.labwork5_GPU();
             labwork.saveOutputImage("labwork5-gpu-out.jpg");
             break;
@@ -274,7 +275,7 @@ void Labwork::labwork4_GPU() {
 
     //Processing
 
-    dim3 blockSize = dim3(16, 16);
+    dim3 blockSize = dim3(8, 8);
 //    int rx = inputImage->width%blockSize.x;
 //    int ry = inputImage->height%blockSize.y;
     dim3 gridSize = dim3 (inputImage->width/blockSize.x,inputImage->height/blockSize.y);  
@@ -290,13 +291,125 @@ void Labwork::labwork4_GPU() {
     cudaFree(devOutput);
 
 
-
 }
 
-void Labwork::labwork5_CPU() {
+//Write a grey scale kernel here :
+ __global__ void grayScale3(uchar3 *input, uchar3 *output,int width, int height) {
+
+        
+       int x = threadIdx.x + blockIdx.x * blockDim.x;
+       int y = threadIdx.y + blockIdx.y * blockDim.y;
+       int w = blockDim.x * gridDim.x;
+
+       //if ((gridDim.x * gridDim.y) < width * height){
+       
+        int tid = y*w + x; 
+
+
+        output[tid].x = (input[tid].x + input[tid].y +
+                       input[tid].z) / 3;
+
+        output[tid].z = output[tid].y = output[tid].x;
+
+      // }
 }
+
+//Write a grey scale kernel here :
+ __global__ void grayScale4(uchar3 *input, uchar3 *output,int width, int height) {
+
+       int matrix[7][7] = {{0,0,1,2,1,0,0},{0,3,13,22,13,3,0},{1,3,59,97,59,13,1},{2,22,97,159,97,22,2},{1,3,59,97,59,3,1},{0,3,13,22,13,3,0},{0,0,1,2,1,0,0}};
+
+
+       int x = threadIdx.x + blockIdx.x * blockDim.x;
+       int y = threadIdx.y + blockIdx.y * blockDim.y;
+       int w = blockDim.x * gridDim.x;
+
+       //if ((gridDim.x * gridDim.y) < width * height){
+   
+        int tid = y*w + x; 
+
+        int outputTemp = 0;
+
+        int sommeCoef = 0;
+
+        if (x>2 && x<width-2 && y>2 && y<height-2){ 
+
+                for (int i=0; i<7; i++){
+
+                	for (int j=0; j<7; j++){
+
+        			outputTemp += input[(y-3+i)+(x-3+j)].x*matrix[j][i]; 
+                                
+                                sommeCoef += matrix[j][i];
+
+                        }
+
+                        
+                        output[tid].x = outputTemp / sommeCoef;
+
+   			output[tid].z = output[tid].y = output[tid].x;
+
+		}
+        }
+
+      // }
+}
+
+
+
+
+
+
+  void Labwork::labwork5_CPU() {
+
+  // Calculate number of pixels
+ 
+    int pixelCount = inputImage->width * inputImage->height ;
+
+} 
 
 void Labwork::labwork5_GPU() {
+
+
+  // Calculate number of pixels
+ 
+    int pixelCount = inputImage->width * inputImage->height ;
+
+    outputImage = static_cast<char *>(malloc(pixelCount * 3));
+
+    //Allocate CUDA Memory
+
+    uchar3 *devInput;
+    uchar3 *devOutput;
+    uchar3 *outputImage1;
+    cudaMalloc(&devInput, pixelCount *sizeof(uchar3));
+    cudaMalloc(&devOutput, pixelCount *sizeof(uchar3));
+    cudaMalloc(&outputImage1, pixelCount *sizeof(uchar3));
+
+    //Copy CUDA Memory from CPU to GPU
+
+    cudaMemcpy(devInput, inputImage->buffer, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
+
+    //Processing
+
+    dim3 blockSize = dim3(32, 32);
+
+//    int rx = inputImage->width%blockSize.x;
+//    int ry = inputImage->height%blockSize.y;
+
+    dim3 gridSize = dim3 (inputImage->width/blockSize.x,inputImage->height/blockSize.y);  
+    grayScale3<<<gridSize, blockSize>>>(devInput, outputImage1, inputImage->width, inputImage->height);    
+    grayScale4<<<gridSize, blockSize>>>(outputImage1, devOutput, inputImage->width, inputImage->height);
+
+    //Copy CUDA Memory from GPU to CPU
+
+    cudaMemcpy(outputImage, devOutput, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
+
+    //Cleaning
+
+    cudaFree(devInput);
+    cudaFree(devOutput);
+
 }
 
 void Labwork::labwork6_GPU() {
