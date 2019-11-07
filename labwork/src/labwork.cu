@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <include/labwork.h>
 #include <cuda_runtime_api.h>
@@ -60,9 +61,6 @@ int main(int argc, char **argv) {
             printf("labwork 4 GPU ellapsed %.1fms\n", lwNum, timer.getElapsedTimeInMilliSec());
             break;
         case 5:
-            //labwork.labwork5_CPU();
-            //labwork.saveOutputImage("labwork5-cpu-out.jpg");
-           // printf("coucou\n");
             labwork.labwork5_GPU();
             labwork.saveOutputImage("labwork5-gpu-out.jpg");
             break;
@@ -299,46 +297,54 @@ void Labwork::labwork4_GPU() {
         
        int x = threadIdx.x + blockIdx.x * blockDim.x;
        int y = threadIdx.y + blockIdx.y * blockDim.y;
-       int w = blockDim.x * gridDim.x;
 
        //if ((gridDim.x * gridDim.y) < width * height){
        
-        int tid = y*w + x; 
+        int tid = y*width + x; 
+
+        if (x<width){
+
+        if (y<height){ 
 
 
         output[tid].x = (input[tid].x + input[tid].y +
                        input[tid].z) / 3;
 
         output[tid].z = output[tid].y = output[tid].x;
+        }
+        }
 
       // }
 }
 
 //Write a grey scale kernel here :
- __global__ void grayScale4(uchar3 *input, uchar3 *output,int width, int height) {
+ __global__ void blur(uchar3 *input, uchar3 *output,int width, int height) {
 
        int matrix[7][7] = {{0,0,1,2,1,0,0},{0,3,13,22,13,3,0},{1,3,59,97,59,13,1},{2,22,97,159,97,22,2},{1,3,59,97,59,3,1},{0,3,13,22,13,3,0},{0,0,1,2,1,0,0}};
 
 
        int x = threadIdx.x + blockIdx.x * blockDim.x;
        int y = threadIdx.y + blockIdx.y * blockDim.y;
-       int w = blockDim.x * gridDim.x;
 
        //if ((gridDim.x * gridDim.y) < width * height){
    
-        int tid = y*w + x; 
+        int tid = y*width + x; 
 
         int outputTemp = 0;
 
         int sommeCoef = 0;
 
-        if (x>2 && x<width-2 && y>2 && y<height-2){ 
+        if (x<width){ 
+
+        if (y<height){  
+
+        if (x>3 && x<width-3 && y>3 && y<height-3){ 
 
                 for (int i=0; i<7; i++){
 
                 	for (int j=0; j<7; j++){
 
-        			outputTemp += input[(y-3+i)+(x-3+j)].x*matrix[j][i]; 
+        			outputTemp += input[(y-3+i)*width+(x-3+j)].x*matrix[j][i]; 
                                 
                                 sommeCoef += matrix[j][i];
 
@@ -350,6 +356,10 @@ void Labwork::labwork4_GPU() {
    			output[tid].z = output[tid].y = output[tid].x;
 
 		}
+        }
+
+        }
+
         }
 
       // }
@@ -366,10 +376,175 @@ void Labwork::labwork4_GPU() {
  
     int pixelCount = inputImage->width * inputImage->height ;
 
+    outputImage = static_cast<char *>(malloc(pixelCount * 3));
+
+    for (int j = 0; j < 100; j++) {     // let's do it 100 times, otherwise it's too fast!
+        for (int i = 0; i < pixelCount; i++) {
+            outputImage[i * 3] = (char) (( (int) inputImage->buffer[i * 3] + (int) inputImage->buffer[i * 3 + 1] +
+                                          (int) inputImage->buffer[i * 3 + 2]) / 3);
+            outputImage[i * 3 + 1] = outputImage[i * 3];
+            outputImage[i * 3 + 2] = outputImage[i * 3];
+        }
+    }
+
+       int matrix[7][7] = {{0,0,1,2,1,0,0},{0,3,13,22,13,3,0},{1,3,59,97,59,13,1},{2,22,97,159,97,22,2},{1,3,59,97,59,3,1},{0,3,13,22,13,3,0},{0,0,1,2,1,0,0}};
+
+
+
+       int outputTemp = 0;
+
+       int sommeCoef = 0;
+
+       int width = inputImage->width; 
+
+       for (int k = 0; k< inputImage->height;k++){ 
+
+       for (int l = 0; l< width; l++){
+
+                for (int i=0; i<7; i++){
+
+                        for (int j=0; j<7; j++){
+
+                                outputTemp += ((int) inputImage->buffer[(k-3+i)*width+(l-3+j)] ) *matrix[j][i]; 
+                                
+                                sommeCoef += matrix[j][i];
+
+                        }
+
+                        
+                        outputImage[i*3] = (char) (outputTemp / sommeCoef);
+                        outputImage[i * 3 + 1] = outputImage[i * 3];
+                        outputImage[i * 3 + 2] = outputImage[i * 3];
+
+                }
+
+        }
+
+        }
+
+
+
+
 } 
+
+
+//Labwork5_GPU() without shared memory.
 
 void Labwork::labwork5_GPU() {
 
+
+
+  // Calculate number of pixels
+ 
+
+    int pixelCount = inputImage->width * inputImage->height ;
+
+
+    outputImage = static_cast<char *>(malloc(pixelCount * 3));
+
+    //Allocate CUDA Memory
+
+    uchar3 *devInput;
+    uchar3 *devOutput;
+    uchar3 *devGray;
+    cudaMalloc(&devInput, pixelCount *sizeof(uchar3));
+    cudaMalloc(&devOutput, pixelCount *sizeof(uchar3));
+    cudaMalloc(&devGray, pixelCount *sizeof(uchar3));
+
+    //Copy CUDA Memory from CPU to GPU
+
+    cudaMemcpy(devInput, inputImage->buffer, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
+
+    //Processing
+
+    dim3 blockSize = dim3(64, 64);
+
+//    int rx = inputImage->width%blockSize.x;
+//    int ry = inputImage->height%blockSize.y;
+
+    int numBlockx = inputImage-> width / (blockSize.x) ;
+    int numBlocky = inputImage-> height / (blockSize.y) ;
+    if ((inputImage-> width % (blockSize.x)) > 0) {
+    	numBlockx++ ;                                                                
+    }                 
+    if ((inputImage-> height % (blockSize.y)) > 0){ 
+        numBlocky++ ;                                            
+    }                                                             
+
+    dim3 gridSize = dim3 (numBlockx,numBlocky);  
+    grayScale3<<<gridSize, blockSize>>>(devInput, devGray, inputImage->width, inputImage->height);    
+    blur<<<gridSize, blockSize>>>(devGray, devOutput, inputImage->width, inputImage->height);
+
+    //Copy CUDA Memory from GPU to CPU
+
+    cudaMemcpy(outputImage, devOutput, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
+
+    //Cleaning
+
+    cudaFree(devInput);
+    cudaFree(devOutput);
+
+}
+
+//Labwork5_GPU() with shared memory.
+
+       
+ __global__ void blur2(uchar3 *input, uchar3 *output,int width, int height) {
+
+       __shared__ char tile[32][32];
+
+       int matrix[7][7] = {{0,0,1,2,1,0,0},{0,3,13,22,13,3,0},{1,3,59,97,59,13,1},{2,22,97,159,97,22,2},{1,3,59,97,59,3,1},{0,3,13,22,13,3,0},{0,0,1,2,1,0,0}};
+
+       int x = threadIdx.x + blockIdx.x * blockDim.x;
+       int y = threadIdx.y + blockIdx.y * blockDim.y;
+
+       //if ((gridDim.x * gridDim.y) < width * height){
+   
+        int tid = y*width + x; 
+
+        tile[threadIdx.x][threadIdx.y] = input[tid].x; 
+
+        __syncthreads();
+
+        int outputTemp = 0;
+
+        int sommeCoef = 0;
+
+        if (x<width){ 
+
+        if (y<height){  
+
+        if (threadIdx.x>3 && threadIdx.x<blockDim.x-3 && threadIdx.y>3 && threadIdx.y<blockDim.y-3){ 
+
+                for (int i=0; i<7; i++){
+
+                        for (int j=0; j<7; j++){
+
+                                outputTemp += tile[threadIdx.x-3+j][threadIdx.y-3+i]*matrix[j][i]; 
+                                
+                                sommeCoef += matrix[j][i];
+
+                        }
+
+                        
+                        output[tid].x =  outputTemp / sommeCoef;
+                        output[tid].z = output[tid].y = output[tid].x;
+
+                }
+
+                __syncthreads();
+        }
+
+        }
+
+        }
+
+      // }
+}
+
+
+
+void Labwork::labwork5_GPU2() {
 
   // Calculate number of pixels
  
@@ -381,10 +556,10 @@ void Labwork::labwork5_GPU() {
 
     uchar3 *devInput;
     uchar3 *devOutput;
-    uchar3 *outputImage1;
+    uchar3 *devGray;
     cudaMalloc(&devInput, pixelCount *sizeof(uchar3));
     cudaMalloc(&devOutput, pixelCount *sizeof(uchar3));
-    cudaMalloc(&outputImage1, pixelCount *sizeof(uchar3));
+    cudaMalloc(&devGray, pixelCount *sizeof(uchar3));
 
     //Copy CUDA Memory from CPU to GPU
 
@@ -397,11 +572,20 @@ void Labwork::labwork5_GPU() {
 //    int rx = inputImage->width%blockSize.x;
 //    int ry = inputImage->height%blockSize.y;
 
-    dim3 gridSize = dim3 (inputImage->width/blockSize.x,inputImage->height/blockSize.y);  
-    grayScale3<<<gridSize, blockSize>>>(devInput, outputImage1, inputImage->width, inputImage->height);    
-    grayScale4<<<gridSize, blockSize>>>(outputImage1, devOutput, inputImage->width, inputImage->height);
+    int numBlockx = inputImage-> width / (blockSize.x) ;
+    int numBlocky = inputImage-> height / (blockSize.y) ;
+    if ((inputImage-> width % (blockSize.x)) > 0) {
+        numBlockx++ ;                                                                
+    }                 
+    if ((inputImage-> height % (blockSize.y)) > 0){ 
+        numBlocky++ ;                                            
+    }                                                             
 
-    //Copy CUDA Memory from GPU to CPU
+    dim3 gridSize = dim3 (numBlockx,numBlocky);  
+    grayScale3<<<gridSize, blockSize>>>(devInput, devGray, inputImage->width, inputImage->height);    
+    blur2<<<gridSize, blockSize>>>(devGray, devOutput, inputImage->width, inputImage->height);
+
+       //Copy CUDA Memory from GPU to CPU
 
     cudaMemcpy(outputImage, devOutput, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
 
