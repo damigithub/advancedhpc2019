@@ -3,6 +3,7 @@
 #include <include/labwork.h>
 #include <cuda_runtime_api.h>
 #include <omp.h>
+#include <string.h>
 
 #define ACTIVE_THREADS 4
 
@@ -17,6 +18,7 @@ int main(int argc, char **argv) {
 
     int lwNum = atoi(argv[1]);
     std::string inputFilename;
+    std::string inputFilename2;
 
     // pre-initialize CUDA to avoid incorrect profiling
     printf("Warming up...\n");
@@ -27,6 +29,36 @@ int main(int argc, char **argv) {
     if (lwNum != 2 ) {
         inputFilename = std::string(argv[2]);
         labwork.loadInputImage(inputFilename);
+
+
+        //For Blending
+
+        if (argc == 4){
+     
+
+
+        	inputFilename2 = std::string(argv[3]);
+        	labwork.loadInputImage2(inputFilename2);
+
+
+                //Resizing
+
+                int w = labwork.getWidth();
+                int h = labwork.getHeight();
+
+                
+		char * cmd = (char *)malloc(sizeof(char)*100); ;
+                sprintf(cmd, "convert %s -resize %dx%d %s",argv[3], w, h, argv[3]);
+		const char * command = cmd;
+
+
+
+
+                system(command);
+
+                labwork.loadInputImage2(inputFilename2);
+ 
+        }
     }
 
     printf("Starting labwork %d\n", lwNum);
@@ -94,6 +126,18 @@ int main(int argc, char **argv) {
 
 void Labwork::loadInputImage(std::string inputFileName) {
     inputImage = jpegLoader.load(inputFileName);
+}
+
+void Labwork::loadInputImage2(std::string inputFileName) {
+    inputImage2 = jpegLoader.load(inputFileName);
+}
+
+int Labwork::getWidth() {
+	return inputImage->width;
+}
+
+int Labwork::getHeight() {
+	return inputImage->height;
 }
 
 void Labwork::saveOutputImage(std::string outputFileName) {
@@ -502,6 +546,7 @@ void Labwork::labwork5_GPU() {
         output[tid].x = (input[tid].x + input[tid].y +
                        input[tid].z) / 3;
 
+
         if (output[tid].x >= threshold){
 
                 output[tid].x = 255;
@@ -518,6 +563,111 @@ void Labwork::labwork5_GPU() {
         }
 
       // }
+}
+
+ __global__ void brightness(uchar3 *input, uchar3 *output,int width, int height,int brightness) {
+
+        
+        int x = threadIdx.x + blockIdx.x * blockDim.x;
+        int y = threadIdx.y + blockIdx.y * blockDim.y;
+       
+        int tid = y*width + x; 
+
+        if (x<width){
+
+        if (y<height){ 
+
+        output[tid].x = (input[tid].x + input[tid].y +
+                       input[tid].z) / 3;
+
+        if (brightness> 50 && brightness != 100){
+
+        	if (output[tid].x + brightness <= 255){ 
+
+        		output[tid].x += brightness;
+
+        	}
+
+        	else{
+        
+        		output[tid].x = 255;
+
+        	}
+
+        }
+
+        if (brightness < 50 && brightness !=0){
+	
+	  if (output[tid].x - brightness >= 0){ 
+
+                        output[tid].x -= (50-brightness);
+
+                }
+
+                else{
+        
+                        output[tid].x = 0;
+
+                }
+
+
+
+        }
+
+        if (brightness == 100){
+    
+            output[tid].x = 255;
+        }
+
+        if (brightness == 0){ 
+    
+            output[tid].x = 0;
+        }
+
+        output[tid].z = output[tid].y = output[tid].x;
+
+        }
+        }
+
+}
+
+ __global__ void blendingGray(uchar3 *input, uchar3 *input2, uchar3 *output,int width, int height,float coefficient) {
+
+        
+       int x = threadIdx.x + blockIdx.x * blockDim.x;
+       int y = threadIdx.y + blockIdx.y * blockDim.y;
+
+       
+        int tid = y*width + x; 
+
+        int nbPixels = width * height;
+	float prod = coefficient * (float) nbPixels;
+        int prodfin = (int) prod;
+
+
+        if (x<width){
+
+        if (y<height){ 
+
+        if (tid <= prodfin){
+
+        	output[tid].x = input[tid].x;
+
+        	output[tid].z = output[tid].y = output[tid].x;
+
+        }
+        else{
+
+        	output[tid].x = input2[tid].x; 
+
+                output[tid].z = output[tid].y = output[tid].x;
+
+        }
+
+        }
+        }
+
+      
 }
 
 
@@ -540,9 +690,17 @@ void Labwork::labwork6_GPU() {
     cudaMalloc(&devOutput, pixelCount *sizeof(uchar3));
     cudaMalloc(&devGray, pixelCount *sizeof(uchar3));
 
+    //For Blending
+    uchar3 *devInput2;
+    uchar3 *devGray2;
+    cudaMalloc(&devInput2, pixelCount *sizeof(uchar3));
+    cudaMalloc(&devGray2, pixelCount *sizeof(uchar3));
+
     //Copy CUDA Memory from CPU to GPU
 
     cudaMemcpy(devInput, inputImage->buffer, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
+
+    //cudaMemcpy(devInput2, inputImage2->buffer, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
 
     //Processing
 
@@ -550,18 +708,30 @@ void Labwork::labwork6_GPU() {
 
     int threshold = 128;
 
+    int brightnessVar = 50; //choose your brightness between 0 and 100. A value of 50 will leave the brightness unchanged.
+    
+    float coefficient = 0.5;  //Blending Coefficient.
+
     int numBlockx = inputImage-> width / (blockSize.x) ;
     int numBlocky = inputImage-> height / (blockSize.y) ;
     if ((inputImage-> width % (blockSize.x)) > 0) {
-        numBlockx++ ;                                                                
-    }                 
-    if ((inputImage-> height % (blockSize.y)) > 0){ 
-        numBlocky++ ;                                            
-    }                                                             
+        numBlockx++ ;
+    }
+    if ((inputImage-> height % (blockSize.y)) > 0){
+        numBlocky++ ;
+    }
 
     dim3 gridSize = dim3 (numBlockx,numBlocky);  
-    grayScale3<<<gridSize, blockSize>>>(devInput, devGray, inputImage->width, inputImage->height);    
-    binary<<<gridSize, blockSize>>>(devGray, devOutput, inputImage->width, inputImage->height,threshold);
+
+    grayScale3<<<gridSize, blockSize>>>(devInput, devGray, inputImage->width, inputImage->height);
+
+    cudaFree(devInput);
+
+    cudaMemcpy(devInput2, inputImage2->buffer, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
+
+    grayScale3<<<gridSize, blockSize>>>(devInput2, devGray2, inputImage->width, inputImage->height);
+
+    blendingGray<<<gridSize, blockSize>>>(devGray, devGray2, devOutput, inputImage->width, inputImage->height, coefficient);
 
     //Copy CUDA Memory from GPU to CPU
 
@@ -569,7 +739,8 @@ void Labwork::labwork6_GPU() {
 
     //Cleaning
 
-    cudaFree(devInput);
+    //cudaFree(devInput);
+    cudaFree(devInput2);
     cudaFree(devOutput);
 
 }
