@@ -1,0 +1,54 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+
+\title{LABWORK6}
+\author{Damien ALVAREZ DE TOLEDO }
+\date{November 2019}
+
+\begin{document}
+
+\maketitle
+
+\section{Implementation of the Labworks}
+
+
+\textbf{Binarization :}\newline
+
+Binarization was done with the \textbf{binarize} kernel function : a threashold is declared before executing the function.\newline
+All of the pixels with a grey value higher than the threashold get to be white pixels. Otherwise they turn into black pixels.\newline
+\newline
+
+\textbf{Brightness :}\newline
+
+Brightness is adjusted on a picture with the \textbf{brightness} kernel function : a brightness value is declared before executing the function. \newline
+Pixels get their grey value increased if the brightness is higher than 50, by an amount of 100-brightness. Grey value gets decreased if brightness is lower than 50, by 50-brightness. Picture gets totally white if brightness = 100, pitch black if brightness = 0 and no modifications if brightness = 50.
+\newline
+
+\textbf{Blending :}\newline
+
+Blending is performed on two picture with \textbf{blendingGray} kernel function : a coefficient allows to know what percentage of display will take each picture on the final output picture.\newline
+\textbf{labwork.h} has been modified to fulfill this function : a new variable of image input has been added because two inputs are needed for this image processing. Other functions were subsequently added. \newline
+\newline
+
+\section{Experimenting with different 2D Block Size Values}
+
+\textbf{Time of Execution Comparison :}\newline
+
+\textbf{(32 x 32) :}\newline
+
+Time of Execution (average of 5 executions) : 139,8 ms\newline 
+
+\textbf{(16 x 16) :}\newline
+
+Time of Execution (average of 5 executions) : 130 ms\newline
+
+\textbf{Conclusion :}\newline
+
+We can conclude that time of execution is slightly faster for 16x16 blocks.\newline
+
+
+
+
+
+\end{document}
+
