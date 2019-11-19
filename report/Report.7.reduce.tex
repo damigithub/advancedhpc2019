@@ -1,0 +1,31 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+
+\usepackage[latin1]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[frenchb]{babel}
+\usepackage{amsmath,mathrsfs,amssymb}
+
+
+\title{LABWORK7}
+\author{Damien ALvarez de Toledo}
+\date{November 2019}
+
+\begin{document}
+
+\maketitle
+
+\section{How we implemented the labwork :}\newline
+
+Grey Scale Stretching processing was implemented with 4 different kernels: \newline
+The first kernel is the Gray Scaling we usually use.\newline
+After Grey Scaling is performed, we must find the minimum and maximum value pixels in the current block the kernel is being executed on. We thus implement a minimum/maximum search using parallel reduction with a shared memory inside our ReduceMin/ReduceMax kernel.\newline
+Once the minimum and maximum are found, we execute the Gray Scale Stretching kernel that will calculate the new value for each pixel with the following formula :\newline
+
+$g'=\dfrac{g - min}{max - min}\newline$
+
+
+
+\end{document}
+

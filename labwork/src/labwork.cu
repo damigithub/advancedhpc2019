@@ -7,6 +7,8 @@
 
 #define ACTIVE_THREADS 4
 
+
+
 int main(int argc, char **argv) {
     printf("USTH ICT Master 2018, Advanced Programming for HPC.\n");
     if (argc < 2) {
@@ -338,12 +340,12 @@ void Labwork::labwork4_GPU() {
 //Write a grey scale kernel here :
  __global__ void grayScale3(uchar3 *input, uchar3 *output,int width, int height) {
 
-        
+
        int x = threadIdx.x + blockIdx.x * blockDim.x;
        int y = threadIdx.y + blockIdx.y * blockDim.y;
 
        //if ((gridDim.x * gridDim.y) < width * height){
-       
+
         int tid = y*width + x; 
 
         if (x<width){
@@ -355,6 +357,7 @@ void Labwork::labwork4_GPU() {
                        input[tid].z) / 3;
 
         output[tid].z = output[tid].y = output[tid].x;
+
         }
         }
 
@@ -475,8 +478,6 @@ void Labwork::labwork4_GPU() {
 //Labwork5_GPU() without shared memory.
 
 void Labwork::labwork5_GPU() {
-
-
 
   // Calculate number of pixels
  
@@ -704,13 +705,13 @@ void Labwork::labwork6_GPU() {
 
     //Processing
 
-    dim3 blockSize = dim3(32, 32);
+    dim3 blockSize = dim3(16, 16);
 
     int threshold = 128;
 
     int brightnessVar = 50; //choose your brightness between 0 and 100. A value of 50 will leave the brightness unchanged.
     
-    float coefficient = 0.5;  //Blending Coefficient.
+    float coefficient = 0.5;  //Blending Coefficient (percentage of the first image on the blending).
 
     int numBlockx = inputImage-> width / (blockSize.x) ;
     int numBlocky = inputImage-> height / (blockSize.y) ;
@@ -745,7 +746,178 @@ void Labwork::labwork6_GPU() {
 
 }
 
+__global__ void reduceMin(uchar3 *in, int *min, int width, int height) {
+
+	// dynamic shared memory size, allocated in host
+        extern __shared__ int cache[1024];
+
+	int x = threadIdx.x + blockIdx.x * blockDim.x;
+        int y = threadIdx.y + blockIdx.y * blockDim.y;
+
+	int nbPixels = width * height;
+	int tid = y*width + x;
+ 	int localtid = threadIdx.y*blockDim.x + threadIdx.x;
+
+
+        if (x<width){
+
+        if (y<height){ 
+
+	cache[localtid] = in[tid].x;
+	__syncthreads();
+
+	// reduction in cache
+	for (int s = 1; s < 512; s *= 2) {
+		if (((localtid % 2) == 0)&&(localtid + s < 1024)) {
+			//min
+			if (cache[localtid] > cache[localtid + s]){
+				cache[localtid] = cache[localtid + s];
+			}
+		}
+        	 __syncthreads();
+	}
+        // only first thread writes back
+	if (localtid == 0){ 
+		*min = cache[0];
+	
+	}
+
+
+	}
+	}
+
+
+}
+
+__global__ void reduceMax(uchar3 *in, int *max, int width, int height) {
+
+	// dynamic shared memory size, allocated in host
+        extern __shared__ int cache[1024];
+
+	int nbPixels = width * height;
+
+        int x = threadIdx.x + blockIdx.x * blockDim.x;
+        int y = threadIdx.y + blockIdx.y * blockDim.y;
+        int tid = y*width + x; 
+	int localtid = threadIdx.y*blockDim.x + threadIdx.x; 
+
+	if (x<width){
+
+        if (y<height){ 
+
+	cache[localtid] = in[tid].x;
+        __syncthreads();
+
+        // reduction in cache
+        for (int s = 1; s < 512; s *= 2) {
+                if (((localtid % 2) == 0)&&(localtid + s< 1024)) {
+                        //max
+                        if (cache[localtid] < cache[localtid + s]){
+                                cache[localtid] = cache[localtid + s];
+                        }
+                }
+                 __syncthreads();
+        }
+
+        // only first thread writes back
+        if (localtid == 0){
+                *max  = cache[0];
+        }
+
+        }
+
+	}
+
+}
+
+
+
+
+ __global__ void grayScaleStretch(uchar3 *input, uchar3 *output,int width, int height,int *min, int *max) {
+
+        
+       int x = threadIdx.x + blockIdx.x * blockDim.x;
+       int y = threadIdx.y + blockIdx.y * blockDim.y;
+       int tid = y*width + x; 
+
+        if (x<width){
+
+        if (y<height){ 
+
+	float temp1 = (float)(((input[tid].x - *min)/(*max - *min)));
+
+        float temp2 = temp1*255;
+
+	output[tid].x = (int)temp2;
+
+        output[tid].z = output[tid].y = output[tid].x;
+
+        }
+        }
+}
+
 void Labwork::labwork7_GPU() {
+
+  // Calculate number of pixels
+
+    int pixelCount = inputImage->width * inputImage->height ;
+
+    outputImage = static_cast<char *>(malloc(pixelCount * 3));
+
+    //Allocate CUDA Memory
+
+    uchar3 *devInput;
+    uchar3 *devOutput;
+    uchar3 *devGray;
+
+    cudaMalloc(&devInput, pixelCount *sizeof(uchar3));
+    cudaMalloc(&devOutput, pixelCount *sizeof(uchar3));
+    cudaMalloc(&devGray, pixelCount *sizeof(uchar3));
+
+    //Copy CUDA Memory from CPU to GPU
+
+    cudaMemcpy(devInput, inputImage->buffer, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
+
+    //Processing
+
+    dim3 blockSize = dim3(32, 32);
+
+    int numBlockx = inputImage-> width / (blockSize.x) ;
+    int numBlocky = inputImage-> height / (blockSize.y) ;
+    
+    if ((inputImage-> width % (blockSize.x)) > 0) {
+        numBlockx++ ;                                                                
+    }            
+
+    if ((inputImage-> height % (blockSize.y)) > 0){ 
+        numBlocky++ ;                                            
+    }
+
+
+    int *min;
+    int *max;
+
+    cudaMalloc(&min, sizeof(int));
+    cudaMalloc(&max, sizeof(int));    
+
+    dim3 gridSize = dim3 (numBlockx,numBlocky);  
+
+    grayScale3<<<gridSize, blockSize>>>(devInput, devGray, inputImage->width, inputImage->height);
+
+    reduceMin<<<gridSize, blockSize>>>(devGray, min, inputImage->width, inputImage->height);
+
+    reduceMax<<<gridSize, blockSize>>>(devGray, max, inputImage->width, inputImage->height);
+
+    grayScaleStretch<<<gridSize, blockSize>>>(devGray, devOutput, inputImage->width, inputImage->height, min, max);
+
+    //Copy CUDA Memory from GPU to CPU
+
+    cudaMemcpy(outputImage, devOutput, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
+
+    //Cleaning
+
+    cudaFree(devInput);
+    cudaFree(devOutput);
 }
 
 void Labwork::labwork8_GPU() {
