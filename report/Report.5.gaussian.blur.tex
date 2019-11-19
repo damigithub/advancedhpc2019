@@ -1,0 +1,52 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+
+\usepackage[latin1]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[frenchb]{babel}
+\usepackage{amsmath,mathrsfs,amssymb}
+
+\newcommand{\dsum}[2]{\sum\limits_{#1}^{#2}}
+
+\title{LABWORK5}
+\author{Damien ALVAREZ DE TOLEDO }
+\date{November 2019}
+
+\begin{document}
+
+\maketitle
+
+\section{Implementation of the Gaussian Blur Filter}\newline
+
+The Gaussian Blur Filter is implemented with the following 7x7 Matrix : \newline
+
+ \[
+   M=
+  \left[ {\begin{array}{ccccccc}
+   0 & 0 & 1 & 2 & 1 & 0 & 0 \\
+   0 & 3 & 13 & 22 & 13 & 3 & 0 \\
+   1 & 13 & 59 & 97 & 50 & 13 & 1\\
+   2 & 22 & 97 & 159 & 97 & 22 & 2\\
+   1 & 13 & 59 & 97 & 50 & 13 & 1\\
+   0 & 3 & 13 & 22 & 13 & 3 & 0 \\
+   0 & 0 & 1 & 2 & 1 & 0 & 0 \\
+  \end{array} } \right]
+\] \newline
+
+Each pixel of our picture is centered on the matrix. The surrounding pixels (within a range of M's dimensions, including our current pixel) are then multiplied by their respective coefficients in the matrix. Results are summed and divided by the sum of all the elements of the matrix : \newline 
+
+$p_i_j=\dfrac{\dsum{k=0,l=0}{6}m_k_l*p_k_l}{\dsum{k=0,l=0}{6}m_k_l}\newline$
+
+$p_i_j :$ value of the pixel of coordinates (i,j).\newline
+
+This gives us the new value of the pixel $p_i_j$.\newline
+
+Each thread performs the calculus for one pixel, so only the original pixel values of our input image are taken into account when calculating.\newline 
+
+We simplified our version of the Gaussian Blurring by not performing the calculus on the edges of the image. This leads to some display difficulties when we perform the Gaussian Blurring with shared memory :
+
+Blurring is performed but a black grid is drawn over the image because the edges of each block of threads are not processed. \newline
+
+\end{document}
+
