@@ -1,0 +1,22 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+
+\title{LABWORK10}
+\author{Damien ALVAREZ DE TOLEDO }
+\date{November 2019}
+
+\begin{document}
+
+\maketitle
+
+\section{Implementation of the Labwork}\newline
+
+The Kuwahara labwork was implemented with one kernel : \textbf{kuwahara()}. In the kernel, we first create two shared memories, one for  saving the V of each pixel in our block, and the second to save the RGB data of each pixel of our block. We then find the mean value of all the V of each 4 sub-matrixes to calculate their standard deviation. After finding out which one has the minimum standard deviation, we operate the mean of RGBs of our pixels in that sub-matrix to then affect that value to our current pixel.\newline
+
+\section{Results}\newline
+
+Unfortunately this labwork is not functioning properly, the output image is an incomprehensible heap of colours.   
+
+
+\end{document}
+

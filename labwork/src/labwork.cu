@@ -1140,7 +1140,338 @@ void Labwork::labwork9_GPU() {
 
 }
 
+ __global__ void kuwahara(uchar3 *input, uchar3 *output,int width, int height, int omega) {
+
+
+       extern __shared__ int cache2[32][32];
+       extern __shared__ uchar3 cacheRGB[32][32];
+
+       int x = threadIdx.x + blockIdx.x * blockDim.x;
+       int y = threadIdx.y + blockIdx.y * blockDim.y;
+       int tid = y*width + x;
+
+
+        if (x<width){
+
+        if (y<height){
+
+	float V = 0;
+
+	float tab[3] = {(float)input[tid].x/255, (float)input[tid].y/255, (float)input[tid].z/255};
+
+        for (int i=0;i<=2;i++){
+
+        	if (tab[i] >= V){
+
+	                V = tab[i];
+
+                }
+        }
+
+	cache2[threadIdx.x][threadIdx.y] = V;
+	cacheRGB[threadIdx.x][threadIdx.y] = input[tid];
+        __syncthreads();
+
+	if ((x >= omega+1)&&(y >= omega+1)&&(x < width - omega - 1)&&(y < height - omega - 1)){
+
+
+		//first matrix
+
+		float m1 = 0;
+
+		int mean = (omega + 1)^2;
+
+		for (int i = 0; i<=omega; i++){
+
+			for (int j = 0; j<=omega ;j++){
+
+				m1 += cache2[i][j];
+
+			}
+
+		}
+
+		m1 = m1/mean;
+
+		//standard deviation 1
+
+		float sd1 = 0;
+
+		 for (int i = 0; i<=omega;i++){
+
+                        for (int j = 0; j<=omega;j++){
+
+                                sd1 += pow(cache2[i][j] - m1,2);
+
+                        }
+
+                }
+
+		sd1 = sd1/mean;
+		sd1 = sqrt(sd1);
+		
+		//second matrix 
+
+                float m2 = 0; 
+
+                for (int i = 0; i<=omega; i++){
+
+                        for (int j = omega+1;j<=2*omega+1;j++){ 
+
+                                m2 += cache2[i][j]; 
+
+                        }
+
+                }
+
+                m2 = m2/mean;
+
+		 float sd2 = 0;
+
+                 for (int i = 0; i<=omega ;i++){
+
+                        for (int j = omega+1; j<=2*omega+1;j++){
+
+                                sd2 += pow(cache2[i][j] - m2,2);
+
+                        }
+
+                }
+
+                sd2 = sd2/mean;
+                sd2 = sqrt(sd2);
+
+		//third matrix
+
+                float m3 = 0;
+
+                for (int i = omega+1; i<=2*omega+1 ;i++){
+
+                        for (int j = 0; j<=omega;j++){
+
+                                m3 += cache2[i][j];
+
+                        }
+
+                }
+
+                m3 = m3/mean; 
+
+		 float sd3 = 0;
+
+                 for (int i = omega+1; i<=2*omega+1 ;i++){
+
+                        for (int j = 0; j<=omega; j++){
+
+                                sd3 += pow(cache2[i][j] - m3,2);
+
+                        }
+
+                }
+
+                sd3 = sd3/mean;
+                sd3 = sqrt(sd3);
+
+		//fourth matrix 
+
+                float m4 = 0; 
+
+                for (int i = omega+1; i<=2*omega+1 ;i++){
+
+                        for (int j = omega+1; j<=2*omega + 1;j++){ 
+
+                                m4 += cache2[i][j]; 
+
+                        }
+
+                }
+
+                m4 = m4/mean;
+
+		 float sd4 = 0;
+
+                 for (int i = omega+1; i<=2*omega+1;i++){
+
+                        for (int j = omega+1; j<=2*omega+1;j++){
+
+                                sd4 += pow(cache2[i][j] - m4,2);
+
+                        }
+
+                }
+
+                sd4 = sd4/mean;
+                sd4 = sqrt(sd4);
+
+		float min = 1000;
+		float tabSD[4]={sd1,sd2,sd3,sd4};
+
+		for (int i=0;i<=3;i++){
+
+                	if (tabSD[i] <= min){
+
+                        	min = tabSD[i];
+
+                	}
+        	}
+
+
+		int mR = 0;
+                int mG = 0;
+                int mB = 0;
+
+			if( min == tabSD[0]){
+
+                		for (int i =0; i<=omega ;i++){
+
+                        		for (int j =0; j<=omega;j++){
+
+                                		mR += cacheRGB[i][j].x;
+						mG += cacheRGB[i][j].y;
+						mB += cacheRGB[i][j].z;
+
+                        		}
+
+                		}
+
+                		mR = mR/mean;
+				mG = mG/mean;
+				mB = mB/mean;
+
+				output[tid].x = mR;
+				output[tid].y = mG;
+				output[tid].z = mB;
+			}
+
+			else if (min == tabSD[1]){
+
+                                for (int i = 0; i<=omega;i++){
+
+                                        for (int j = omega+1; j<=2*omega +1;j++){
+
+                                                mR += cacheRGB[i][j].x;
+                                                mG += cacheRGB[i][j].y;
+                                                mB += cacheRGB[i][j].z;
+
+                                        }
+
+                                }
+
+                                mR = mR/mean;
+                                mG = mG/mean;
+                                mB = mB/mean;
+
+                                output[tid].x = mR;
+				output[tid].y = mG;
+				output[tid].z = mB;
+			}
+
+			 else if (min == tabSD[2]){
+
+                                for (int i = omega+1; i<=2*omega+1;i++){
+
+                                        for (int j =0; j<=omega;j++){
+
+                                                mR += cacheRGB[i][j].x;
+                                                mG += cacheRGB[i][j].y;
+                                                mB += cacheRGB[i][j].z;
+
+                                        }
+
+                                }
+
+                                mR = mR/mean;
+                                mG = mG/mean;
+                                mB = mB/mean;
+
+                                output[tid].x = mR;
+                                output[tid].y = mG;
+                                output[tid].z = mB;
+			}
+
+			 else if (min == tabSD[3]){
+
+                                for (int i = omega+1; i<=2*omega+1;i++){
+
+                                        for (int j = omega+1; j<=2*omega+1;j++){
+
+                                                mR += cacheRGB[i][j].x;
+                                                mG += cacheRGB[i][j].y;
+                                                mB += cacheRGB[i][j].z;
+
+                                        }
+
+                                }
+
+                                mR = mR/mean;
+                                mG = mG/mean;
+                                mB = mB/mean;
+
+                                output[tid].x = mR;
+                                output[tid].y = mG;
+                                output[tid].z = mB;
+			}
+	}
+
+
+        }
+        }
+}
+
 void Labwork::labwork10_GPU(){
+
+    int pixelCount = inputImage->width * inputImage->height;
+
+    outputImage = static_cast<char *>(malloc(pixelCount * 3));
+
+    //Allocate CUDA Memory
+
+    uchar3 *devInput;
+    uchar3 *devOutput;
+
+    float *devH;
+    float *devS;
+    float *devV;
+
+    cudaMalloc(&devInput, pixelCount *sizeof(uchar3));
+    cudaMalloc(&devOutput, pixelCount *sizeof(uchar3));
+
+    cudaMalloc(&devH, pixelCount *sizeof(float));
+    cudaMalloc(&devS, pixelCount *sizeof(float));
+    cudaMalloc(&devV, pixelCount *sizeof(float));
+
+    //Copy CUDA Memory from CPU to GPU
+
+    cudaMemcpy(devInput, inputImage->buffer, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
+
+    //Processing
+
+    dim3 blockSize = dim3(32, 32);
+
+    int numBlockx = inputImage-> width / (blockSize.x) ;
+    int numBlocky = inputImage-> height / (blockSize.y) ;
+    if ((inputImage-> width % (blockSize.x)) > 0) {
+        numBlockx++ ;
+    }
+    if ((inputImage-> height % (blockSize.y)) > 0){
+        numBlocky++ ;
+    }
+
+    dim3 gridSize = dim3 (numBlockx,numBlocky);
+
+    int omega = 15; //to match the block size
+
+    kuwahara<<<gridSize, blockSize>>>(devInput, devOutput, inputImage->width, inputImage->height, omega);
+
+    //Copy CUDA Memory from GPU to CPU
+
+    cudaMemcpy(outputImage, devOutput, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
+
+    //Cleaning
+
+    cudaFree(devInput);
+    cudaFree(devOutput);
+
 }
 
 
