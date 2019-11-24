@@ -4,6 +4,7 @@
 #include <cuda_runtime_api.h>
 #include <omp.h>
 #include <string.h>
+#include <math.h>
 
 #define ACTIVE_THREADS 4
 
@@ -920,7 +921,219 @@ void Labwork::labwork7_GPU() {
     cudaFree(devOutput);
 }
 
+ __global__ void rgb2hsv(uchar3 *input,float *outputH,float *outputS, float *outputV, int width, int height) {
+
+
+       int x = threadIdx.x + blockIdx.x * blockDim.x;
+       int y = threadIdx.y + blockIdx.y * blockDim.y;
+       int tid = y*width + x;
+	float V;
+	float S;
+	float H;
+	float min = 255;
+	float max = 0;
+	float delta = max - min;
+
+	if (x<width){
+
+        if (y<height){
+
+	float tab[3] = {(float)input[tid].x/255, (float)input[tid].y/255, (float)input[tid].z/255};
+
+	for (int i=0;i<=2;i++){
+
+		if (tab[i] <= min){
+			min = tab[i];
+		}
+		if (tab[i] >= max){
+			max = tab[i];
+		}
+	}
+
+	//V
+	V =  max;
+
+	//S
+	if  (max == 0){
+		S = 0;
+	}
+	else{
+		S = delta / max;
+	}
+
+	//H
+	if (delta == 0){
+		H = 0;
+	}
+
+	if (max == tab[0]){
+
+		H = 60 * (int)((tab[1] - tab[2])/delta)%6;
+
+	}
+
+	else if(max == tab[1]){
+
+	H = 60 * (2 + (tab[2] - tab[0])/delta);
+
+        }
+
+	else if(max == tab[2]){ 
+
+        H = 60 * (4 + (tab[0] - tab[1])/delta);
+
+        }
+
+
+	outputH[tid] = H;
+	outputS[tid] = S;
+	outputV[tid] = V;
+
+	}
+	}
+
+}
+
+ __global__ void hsv2rgb(float *inputH, float *inputS, float *inputV, uchar3 *output, int width, int height) {
+
+        
+       int x = threadIdx.x + blockIdx.x * blockDim.x;
+       int y = threadIdx.y + blockIdx.y * blockDim.y;
+       int tid = y*width + x; 
+
+        if (x<width){
+
+        if (y<height){ 
+
+	float H = inputH[tid];
+
+	float S = inputS[tid];
+
+	float V = inputV[tid];
+
+	float d =inputH[tid]/60;
+
+	int hi = (int)d%6;
+
+	float f = d - hi;
+
+	float l = V * (1 - S);
+
+	float m = V * (1 - f*S);
+
+	float n = V * (1 - (1 - f)*S);
+
+
+        if ((H>=0)&&(H<60)){
+
+		output[tid].x = (int)(V*255);
+		output[tid].y =(int) (n*255);
+		output[tid].z = (int)(l*255);
+
+	}
+	if ((H>=60)&&(H<120)){
+
+                output[tid].x = (int)(m*255);
+                output[tid].y = (int)(V*255);
+                output[tid].z = (int)(l*255);
+
+        }
+	if ((H>=120)&&(H<180)){
+
+                output[tid].x = (int)(l*255);
+                output[tid].y = (int)(V*255);
+                output[tid].z = (int)(n*255);
+
+        }
+	if ((H>=180)&&(H<240)){
+
+                output[tid].x = (int)(l*255);
+                output[tid].y = (int)(m*255);
+                output[tid].z = (int)(V*255);
+
+        }
+	if ((H>=240)&&(H<300)){
+
+                output[tid].x = (int)(n*255);
+                output[tid].y = (int)(l*255);
+                output[tid].z = (int)(V*255);
+
+        }
+
+	if ((H>=300)&&(H<360)){
+
+                output[tid].x = (int)(V*255);
+                output[tid].y = (int)(l*255);
+                output[tid].z = (int)(m*255);
+
+        }
+
+
+        }
+        }
+}
+
 void Labwork::labwork8_GPU() {
+
+    // Calculate number of pixels
+ 
+
+    int pixelCount = inputImage->width * inputImage->height ;
+
+
+    outputImage = static_cast<char *>(malloc(pixelCount * 3));
+
+    //Allocate CUDA Memory
+
+    uchar3 *devInput;
+    uchar3 *devOutput;
+
+    float *devH;
+    float *devS;
+    float *devV;
+
+    cudaMalloc(&devInput, pixelCount *sizeof(uchar3));
+    cudaMalloc(&devOutput, pixelCount *sizeof(uchar3));
+    
+    cudaMalloc(&devH, pixelCount *sizeof(float));
+    cudaMalloc(&devS, pixelCount *sizeof(float));
+    cudaMalloc(&devV, pixelCount *sizeof(float));
+
+    //Copy CUDA Memory from CPU to GPU
+
+    cudaMemcpy(devInput, inputImage->buffer, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
+
+    //Processing
+
+    dim3 blockSize = dim3(32, 32);
+
+//    int rx = inputImage->width%blockSize.x;
+//    int ry = inputImage->height%blockSize.y;
+
+    int numBlockx = inputImage-> width / (blockSize.x) ;
+    int numBlocky = inputImage-> height / (blockSize.y) ;
+    if ((inputImage-> width % (blockSize.x)) > 0) {
+        numBlockx++ ;                                                                
+    }                 
+    if ((inputImage-> height % (blockSize.y)) > 0){ 
+        numBlocky++ ;                                            
+    }                                                             
+
+    dim3 gridSize = dim3 (numBlockx,numBlocky);  
+
+    rgb2hsv<<<gridSize, blockSize>>>(devInput, devH, devS, devV, inputImage->width, inputImage->height);
+    hsv2rgb<<<gridSize, blockSize>>>(devH, devS, devV, devOutput, inputImage->width, inputImage->height);
+
+    //Copy CUDA Memory from GPU to CPU
+
+    cudaMemcpy(outputImage, devOutput, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
+
+    //Cleaning
+
+    cudaFree(devInput);
+    cudaFree(devOutput);
+
+
 }
 
 void Labwork::labwork9_GPU() {

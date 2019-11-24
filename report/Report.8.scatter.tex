@@ -1,0 +1,83 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+
+\usepackage[latin1]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[frenchb]{babel}
+\usepackage{amsmath,mathrsfs,amssymb}
+
+\title{LABWORK8}
+\author{Damien ALVAREZ DE TOLEDO }
+\date{November 2019}
+
+\begin{document}
+
+\maketitle
+
+\section{Implementation of the Labwork}\newline
+
+Two new kernels were created for this labwork : \textbf{rgb2hsv} and \textbf{hsv2rgb}.\newline
+For the \textbf{rgb2hsv} kernel, we converted the data of our rgb pixels to hsv data with the following formulas, after scaling our RGB pixels from [0...255] to [0...1] :\newline
+\newline
+\textbf{V = max(R,G,B)}
+\newline
+\newline 
+With \textbf{min = min(R,G,B)} and \textbf{max = max(R,G,B)} we have :\newline
+
+\textbf{delta = max - min}\newline
+\newline
+
+\textbf{$S=0$} if delta = 0,\newline
+\newline
+
+\textbf{$S=\dfrac{delta}{max}$} otherwise.\newline
+\newline
+
+And finally for H:
+\newline
+\newline
+$H = 60 * \dfrac{G - B}{delta}mod6$ if max = R,
+\newline
+\newline
+$H = 60 * (2 + \dfrac{B - R}{delta})$ if max = G,
+\newline
+\newline
+$H = 60 * (4 + \dfrac{R - G}{delta})$ if max = B,
+\newline
+\newline
+\newline
+
+\newline
+\newline
+
+For the \textbf{hsv2rgb} kernel, we converted our hsv data back to rgb pixels with the following formulas :\newline
+\newline
+$d = \dfrac{H}{60}$\newline
+\newline
+$hi = (int)dmod6$\newline
+\newline
+$f = d - hi$\newline
+\newline
+$l = V * (1 - S) $\newline
+\newline
+$m = V * (1 - f*S)$\newline
+\newline
+$m = V * (1 - (1 - f)*S)$\newline
+\newline
+$(R,G,B) = (V,n,L)$ if (0<=H<60)\newline
+$(R,G,B) = (m,V,L)$ if (60<=H<120)\newline
+$(R,G,B) = (l,V,n)$ if (120<=H<180)\newline
+$(R,G,B) = (l,m,V)$ if (180<=H<240)\newline
+$(R,G,B) = (n,l,V)$ if (240<=H<300)\newline
+$(R,G,B) = (V,l,m)$ if (300<=H<360)\newline
+\newline 
+
+And finally scaling from [0...1] to [0...255] has to be done onto the RGB triplet.\newline
+
+\section{Comparison between input image and output image (after rgb2hsv and hsv2rgb kernels) :}\newline
+
+If we take the eiffel tower image \textbf{eiffel.jpg} as an example, the image goes from a blue sky to a green sky, while the eiffel tower has some parts of magenta over it. Input and Output images are very similar.
+
+
+\end{document}
